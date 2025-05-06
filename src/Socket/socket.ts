@@ -215,8 +215,7 @@ export const makeSocket = (config: SocketConfig) => {
 			node.attrs.id = generateMessageTag()
 		}
 
-		const msgId = node.attrs.id
-		const wait = waitForMessage(msgId, timeoutMs)
+		const msgId = node.attrs.id		
 
 		const [result] = await Promise.all([
 			waitForMessage(msgId, timeoutMs),
