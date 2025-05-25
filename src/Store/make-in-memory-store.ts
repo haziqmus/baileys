@@ -19,7 +19,7 @@ export const waChatKey = (pin: boolean) => ({
 	compare: (k1: string, k2: string) => k2.localeCompare(k1)
 })
 
-export const waMessageID = (m: WAMessage) => m.key.id || ''
+export const waMessageID = (m: WAMessage) => (m && m.key && m.key.id) ? m.key.id : ''
 
 export const waLabelAssociationKey: Comparable<LabelAssociation, string> = {
 	key: (la: LabelAssociation) => (la.type === LabelAssociationType.Chat ? la.chatId + la.labelId : la.chatId + la.messageId + la.labelId),
