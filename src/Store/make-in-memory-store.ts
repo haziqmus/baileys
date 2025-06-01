@@ -48,8 +48,7 @@ export default (config: BaileysInMemoryStoreConfig) => {
 	const groupMetadata: { [_: string]: GroupMetadata } = {}
 	const presences: { [id: string]: { [participant: string]: PresenceData } } = {}
 	const state: ConnectionState = { connection: 'close' }
-	// const labels = new ObjectRepository<Label>()
-	const labels: { [_: string]: Label } = {} // Changed to be like contacts
+	const labels = new ObjectRepository<Label>()
 	const labelAssociations = new KeyedDB(labelAssociationKey, labelAssociationKey.key) as KeyedDB<LabelAssociation, string>
 
 	const assertMessageList = (jid: string) => {
@@ -74,15 +73,9 @@ export default (config: BaileysInMemoryStoreConfig) => {
 	}
 
 	const labelsUpsert = (newLabels: Label[]) => {
-		const oldLabels = new Set(Object.keys(labels)); // Keep track of old labels
 		for(const label of newLabels) {
-			oldLabels.delete(label.id); // Remove label from the old set if it exists
-			labels[label.id] = Object.assign(
-				labels[label.id] || {},
-				label
-			)
+			labels.upsertById(label.id, label)
 		}
-		return oldLabels; // Return old labels for deletion if necessary.
 	}
 
 	/**
@@ -188,14 +181,12 @@ export default (config: BaileysInMemoryStoreConfig) => {
 
 		ev.on('labels.edit', (label: Label) => {
 			if(label.deleted) {
-				delete labels[label.id] // Delete label
-				return;
+				return labels.deleteById(label.id)
 			}
 
 			// WhatsApp can store only up to 20 labels
-			if(Object.keys(labels).length < 20) {
-				labels[label.id] = label
-				return;
+			if(labels.count() < 20) {
+				return labels.upsertById(label.id, label)
 			}
 
 			logger.error('Labels count exceed')
@@ -347,9 +338,7 @@ export default (config: BaileysInMemoryStoreConfig) => {
 		chats.upsert(...json.chats)
 		labelAssociations.upsert(...json.labelAssociations || [])
 		contactsUpsert(Object.values(json.contacts))
-		//labelsUpsert(Object.values(json.labels || {}))
-		labelsUpsert(Object.values(json.labels || {}) as Label[]); // Added type assertion for labels
-
+		labelsUpsert(Object.values(json.labels || {}))
 		for(const jid in json.messages) {
 			const list = assertMessageList(jid)
 			for(const msg of json.messages[jid]) {
@@ -402,8 +391,7 @@ export default (config: BaileysInMemoryStoreConfig) => {
 		 * that were "caught" during their editing.
 		 */
 		getLabels: () => {
-			// return labels
-			return Object.values(labels);
+			return labels
 		},
 
 		/**
