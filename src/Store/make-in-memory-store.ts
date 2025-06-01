@@ -19,7 +19,7 @@ export const waChatKey = (pin: boolean) => ({
 	compare: (k1: string, k2: string) => k2.localeCompare(k1)
 })
 
-export const waMessageID = (m: WAMessage) => (m && m.key && m.key.id) ? m.key.id : ''
+export const waMessageID = (m: WAMessage) => m.key.id || ''
 
 export const waLabelAssociationKey: Comparable<LabelAssociation, string> = {
 	key: (la: LabelAssociation) => (la.type === LabelAssociationType.Chat ? la.chatId + la.labelId : la.chatId + la.messageId + la.labelId),
@@ -48,7 +48,8 @@ export default (config: BaileysInMemoryStoreConfig) => {
 	const groupMetadata: { [_: string]: GroupMetadata } = {}
 	const presences: { [id: string]: { [participant: string]: PresenceData } } = {}
 	const state: ConnectionState = { connection: 'close' }
-	const labels = new ObjectRepository<Label>()
+	// const labels = new ObjectRepository<Label>()
+	const labels: { [_: string]: Label } = {} // Changed to be like contacts
 	const labelAssociations = new KeyedDB(labelAssociationKey, labelAssociationKey.key) as KeyedDB<LabelAssociation, string>
 
 	const assertMessageList = (jid: string) => {
@@ -73,9 +74,15 @@ export default (config: BaileysInMemoryStoreConfig) => {
 	}
 
 	const labelsUpsert = (newLabels: Label[]) => {
+		const oldLabels = new Set(Object.keys(labels)); // Keep track of old labels
 		for(const label of newLabels) {
-			labels.upsertById(label.id, label)
+			oldLabels.delete(label.id); // Remove label from the old set if it exists
+			labels[label.id] = Object.assign(
+				labels[label.id] || {},
+				label
+			)
 		}
+		return oldLabels; // Return old labels for deletion if necessary.
 	}
 
 	/**
@@ -181,12 +188,14 @@ export default (config: BaileysInMemoryStoreConfig) => {
 
 		ev.on('labels.edit', (label: Label) => {
 			if(label.deleted) {
-				return labels.deleteById(label.id)
+				delete labels[label.id] // Delete label
+				return;
 			}
 
 			// WhatsApp can store only up to 20 labels
-			if(labels.count() < 20) {
-				return labels.upsertById(label.id, label)
+			if(Object.keys(labels).length < 20) {
+				labels[label.id] = label
+				return;
 			}
 
 			logger.error('Labels count exceed')
@@ -338,7 +347,9 @@ export default (config: BaileysInMemoryStoreConfig) => {
 		chats.upsert(...json.chats)
 		labelAssociations.upsert(...json.labelAssociations || [])
 		contactsUpsert(Object.values(json.contacts))
-		labelsUpsert(Object.values(json.labels || {}))
+		//labelsUpsert(Object.values(json.labels || {}))
+		labelsUpsert(Object.values(json.labels || {}) as Label[]); // Added type assertion for labels
+
 		for(const jid in json.messages) {
 			const list = assertMessageList(jid)
 			for(const msg of json.messages[jid]) {
@@ -391,7 +402,8 @@ export default (config: BaileysInMemoryStoreConfig) => {
 		 * that were "caught" during their editing.
 		 */
 		getLabels: () => {
-			return labels
+			// return labels
+			return Object.values(labels);
 		},
 
 		/**
